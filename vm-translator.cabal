@@ -25,13 +25,16 @@ source-repository head
   location: https://github.com/adrianrl99/vm-translator
 
 library
+  exposed-modules:
+      AST
+      Lexer
+      Parser
   other-modules:
       Paths_vm_translator
   hs-source-dirs:
       src
   default-extensions:
       OverloadedStrings
-      StrictData
   ghc-options: -Wall -Wextra -Wcompat -fwarn-tabs -Widentities -Wincomplete-uni-patterns -Wincomplete-record-updates -Wredundant-constraints -Wnoncanonical-monad-instances -Wunused-packages -fwrite-ide-info -hiedir=.hie -Wmissing-export-lists -Wpartial-fields -fhide-source-paths
   build-tools:
       alex
@@ -46,13 +49,17 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      LexerSpec
+      ParserSpec
+      AST
+      Lexer
+      Parser
       Paths_vm_translator
   hs-source-dirs:
       test
       src
   default-extensions:
       OverloadedStrings
-      StrictData
   ghc-options: -Wall -Wextra -Wcompat -fwarn-tabs -Widentities -Wincomplete-uni-patterns -Wincomplete-record-updates -Wredundant-constraints -Wnoncanonical-monad-instances -Wunused-packages -fwrite-ide-info -hiedir=.hie -Wmissing-export-lists -Wpartial-fields -fhide-source-paths -threaded -rtsopts -with-rtsopts=-N
   build-tool-depends:
       hspec-discover:hspec-discover

@@ -19,7 +19,6 @@ extra-source-files:
 
 default-extensions:
   - OverloadedStrings
-  - StrictData
 
 dependencies:
   - base
