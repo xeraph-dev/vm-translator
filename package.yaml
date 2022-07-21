@@ -1,0 +1,53 @@
+spec-version: 0.34
+name: vm-translator
+version: 1.0.0
+synopsis: An VM Translator for Hack VM
+category: Language
+
+homepage: https://github.com/adrianrl99/vm-translator#readme
+bug-reports: https://github.com/adrianrl99/vm-translator/issues
+
+author: Adrian
+maintainer: Adrian
+copyright: 2022 Adrian
+
+github: adrianrl99/vm-translator
+
+extra-source-files:
+  - README.md
+  - LICENSE
+
+default-extensions:
+  - OverloadedStrings
+  - StrictData
+
+dependencies:
+  - base
+
+ghc-options: -Wall -Wextra -Wcompat -fwarn-tabs -Widentities
+  -Wincomplete-uni-patterns -Wincomplete-record-updates
+  -Wredundant-constraints -Wnoncanonical-monad-instances
+  -Wunused-packages -fwrite-ide-info -hiedir=.hie
+  -Wmissing-export-lists -Wpartial-fields -fhide-source-paths
+
+library:
+  source-dirs: src
+  dependencies:
+    - array
+    - bytestring
+  build-tools:
+    - alex
+    - happy
+
+tests:
+  spec:
+    ghc-options: -threaded -rtsopts -with-rtsopts=-N
+    main: Spec.hs
+    source-dirs:
+      - test
+      - src
+    dependencies:
+      - hspec
+      - array
+      - bytestring
+    build-tools: hspec-discover
