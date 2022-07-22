@@ -23,7 +23,9 @@ $digit = [0-9]
 
 tokens :-
 
-<0> $white+ ;
+<0> $white+		;
+
+<0> "//" .*   ;
 
 -- Stack operators
 <0> push      { tok Push }

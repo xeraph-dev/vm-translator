@@ -34,6 +34,10 @@ spec = do
   describe "Constants" $ do
     it "Integer" $ scanTokens "2" `shouldBe` Right [Integer 2, EOF]
 
+  describe "Comments" $ do
+    it "line comment" $ scanTokens "// comment" `shouldBe` Right [EOF]
+    it "inline comment" $ scanTokens "add // comment" `shouldBe` Right [Add, EOF]
+
 
 scanTokens :: ByteString -> Either String [Token]
 scanTokens s = case scanMany s of

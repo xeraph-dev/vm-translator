@@ -10,12 +10,12 @@ module AST
 
 data EInteger a
   = EInteger a Integer
-  deriving (Foldable, Show)
+  deriving (Foldable, Show, Eq)
 
 data Operator a
   = Push a
   | Pop a
-  deriving (Foldable, Show)
+  deriving (Foldable, Show, Eq)
 
 data ALCommand a
   = Add a
@@ -27,7 +27,7 @@ data ALCommand a
   | And a
   | Or a
   | Not a
-  deriving (Foldable, Show)
+  deriving (Foldable, Show, Eq)
 
 data Segment a
   = Local a
@@ -38,9 +38,9 @@ data Segment a
   | Static a
   | Pointer a
   | Temp a
-  deriving (Foldable, Show)
+  deriving (Foldable, Show, Eq)
 
 data Exp a
   = EAccessCommand a (Operator a) (Segment a) (EInteger a)
   | EALCommand a (ALCommand a)
-  deriving (Foldable, Show)
+  deriving (Foldable, Show, Eq)

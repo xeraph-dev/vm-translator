@@ -50,7 +50,6 @@ test-suite spec
   main-is: Spec.hs
   other-modules:
       LexerSpec
-      ParserSpec
       AST
       Lexer
       Parser
