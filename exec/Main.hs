@@ -21,6 +21,7 @@ import           System.Console.Haskeline   (InputT, Settings (Settings),
                                              getInputLine, historyFile,
                                              noCompletion, outputStrLn,
                                              runInputT)
+import           System.FilePath            (replaceExtension, takeBaseName)
 import           VMTranslator.Translator    (translate)
 
 data Args
@@ -71,20 +72,18 @@ replLoop f
     , complete = noCompletion
     } (repl f)
 
-
-replaceExt :: String -> String -> String
-replaceExt x = ((reverse . dropWhile (/= '.') $ reverse x) <>)
-
 main :: IO ()
 main = do
   progArgs@Args {argsInput=input, argsOutput=output'} <- cmdArgs args
-  let output = if not $ null output' then output' else replaceExt input "hack"
+  let output = if not $ null output' then output' else replaceExtension input "asm"
+  let fileName = takeBaseName input
+  let translate' = translate $ BS.pack fileName
 
   if null input || argsRepl progArgs
-    then replLoop translate
+    then replLoop translate'
     else do
       file <- readFile input
-      case translate $ BS.pack file of
+      case translate' $ BS.pack file of
         Left e -> liftIO (setSGR [SetColor Foreground Vivid Red] >> putStrLn e >> setSGR [Reset])
         Right h -> BS.writeFile output h
 
