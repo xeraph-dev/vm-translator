@@ -40,6 +40,16 @@ import VMTranslator.Lexer (runAlex)
   or          { L.RangedToken (L.Identifier "or") _ }
   not         { L.RangedToken (L.Identifier "not") _ }
 
+  if          { L.RangedToken (L.Identifier "if") _ }
+  goto        { L.RangedToken (L.Identifier "goto") _ }
+  label       { L.RangedToken (L.Identifier "label") _ }
+
+  call        { L.RangedToken (L.Identifier "call") _ }
+  function    { L.RangedToken (L.Identifier "function") _ }
+  return      { L.RangedToken (L.Identifier "return") _ }
+
+  '-'         { L.RangedToken (L.Symbol "-") _ }
+
   identifier  { L.RangedToken (L.Identifier _) _ }
   integer     { L.RangedToken (L.Integer _) _ }
 
@@ -75,9 +85,21 @@ alCommand :: { A.Exp L.Range }
   | or  { A.EALCommand (L.rtRange $1) A.Or }
   | not { A.EALCommand (L.rtRange $1) A.Not }
 
+bCommand :: { A.Exp L.Range }
+  : goto identifier         { A.EBCommand (L.rtRange $1 <-> L.rtRange $2) (A.Goto (unTok $2 (\s (L.Identifier id) -> id))) }
+  | if '-' goto identifier  { A.EBCommand (L.rtRange $1 <-> L.rtRange $4) (A.IfGoto (unTok $4 (\s (L.Identifier id) -> id))) }
+  | label identifier        { A.EBCommand (L.rtRange $1 <-> L.rtRange $2) (A.Label (unTok $2 (\s (L.Identifier id) -> id))) }
+
+fCommand :: { A.Exp L.Range }
+  : call identifier integer     { A.EFCommand (L.rtRange $1 <-> L.rtRange $3) (A.Call (unTok $2 (\s (L.Identifier id) -> id)) (unTok $3 (\s (L.Integer int) -> int))) }
+  | function identifier integer { A.EFCommand (L.rtRange $1 <-> L.rtRange $3) (A.Function (unTok $2 (\s (L.Identifier id) -> id)) (unTok $3 (\s (L.Integer int) -> int))) }
+  | return                      { A.EFCommand (L.rtRange $1) A.Return }
+
 exp :: { A.Exp L.Range }
   : alCommand { $1 }
   | maCommand { $1 }
+  | bCommand  { $1 }
+  | fCommand  { $1 }
 
 
 exps
@@ -121,10 +143,25 @@ L.Range a1 _ <-> L.Range _ b2 = L.Range a1 b2
 
 (<-:->) :: A.Exp L.Range -> [A.Exp L.Range] -> [A.Exp L.Range]
 e1 <-:-> [] = [e1]
-e1@(A.EMACommand r1 _) <-:-> e2@((A.EMACommand r2 _):_) = (e1, r1) <>:<> (e2, r2)
-e1@(A.EMACommand r1 _) <-:-> e2@((A.EALCommand r2 _):_) = (e1, r1) <>:<> (e2, r2)
-e1@(A.EALCommand r1 _) <-:-> e2@((A.EALCommand r2 _):_) = (e1, r1) <>:<> (e2, r2)
-e1@(A.EALCommand r1 _) <-:-> e2@((A.EMACommand r2 _):_) = (e1, r1) <>:<> (e2, r2)
+e1@(A.EMACommand r1 _) <-:-> e2@((A.EMACommand r2 _):_) = (e1, r1)  <>:<> (e2, r2)
+e1@(A.EMACommand r1 _) <-:-> e2@((A.EALCommand r2 _):_) = (e1, r1)  <>:<> (e2, r2)
+e1@(A.EMACommand r1 _) <-:-> e2@((A.EBCommand r2 _):_) = (e1, r1)   <>:<> (e2, r2)
+e1@(A.EMACommand r1 _) <-:-> e2@((A.EFCommand r2 _):_) = (e1, r1)   <>:<> (e2, r2)
+
+e1@(A.EALCommand r1 _) <-:-> e2@((A.EALCommand r2 _):_) = (e1, r1)  <>:<> (e2, r2)
+e1@(A.EALCommand r1 _) <-:-> e2@((A.EMACommand r2 _):_) = (e1, r1)  <>:<> (e2, r2)
+e1@(A.EALCommand r1 _) <-:-> e2@((A.EBCommand r2 _):_) = (e1, r1)   <>:<> (e2, r2)
+e1@(A.EALCommand r1 _) <-:-> e2@((A.EFCommand r2 _):_) = (e1, r1)   <>:<> (e2, r2)
+
+e1@(A.EBCommand r1 _)  <-:-> e2@((A.EBCommand r2 _):_) = (e1, r1)   <>:<> (e2, r2)
+e1@(A.EBCommand r1 _)  <-:-> e2@((A.EMACommand r2 _):_) = (e1, r1)  <>:<> (e2, r2)
+e1@(A.EBCommand r1 _)  <-:-> e2@((A.EALCommand r2 _):_) = (e1, r1)  <>:<> (e2, r2)
+e1@(A.EBCommand r1 _)  <-:-> e2@((A.EFCommand r2 _):_) = (e1, r1)  <>:<> (e2, r2)
+
+e1@(A.EFCommand r1 _)  <-:-> e2@((A.EFCommand r2 _):_) = (e1, r1)  <>:<> (e2, r2)
+e1@(A.EFCommand r1 _)  <-:-> e2@((A.EMACommand r2 _):_) = (e1, r1)  <>:<> (e2, r2)
+e1@(A.EFCommand r1 _)  <-:-> e2@((A.EALCommand r2 _):_) = (e1, r1)  <>:<> (e2, r2)
+e1@(A.EFCommand r1 _)  <-:-> e2@((A.EBCommand r2 _):_) = (e1, r1)  <>:<> (e2, r2)
 
 parse :: ByteString -> Either String [A.Exp L.Range]
 parse input = runAlex input parseVMT
