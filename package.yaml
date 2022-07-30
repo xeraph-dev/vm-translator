@@ -48,5 +48,6 @@ executables:
       - ansi-terminal
       - bytestring
       - cmdargs
+      - directory
       - filepath
       - haskeline

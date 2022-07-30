@@ -7,6 +7,7 @@ module Main (main) where
 import           Control.Monad.IO.Class     (MonadIO (liftIO))
 import           Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
+import           Data.Either                (rights)
 import           System.Console.ANSI        (Color (Red),
                                              ColorIntensity (Vivid),
                                              ConsoleLayer (Foreground),
@@ -21,7 +22,10 @@ import           System.Console.Haskeline   (InputT, Settings (Settings),
                                              getInputLine, historyFile,
                                              noCompletion, outputStrLn,
                                              runInputT)
-import           System.FilePath            (replaceExtension, takeBaseName)
+import           System.Directory           (doesDirectoryExist,
+                                             getDirectoryContents, makeAbsolute)
+import           System.FilePath            (isExtensionOf, takeBaseName,
+                                             (-<.>), (<.>), (</>))
 import           VMTranslator.Translator    (translate)
 
 data Args
@@ -72,18 +76,46 @@ replLoop f
     , complete = noCompletion
     } (repl f)
 
+translateVM :: (ByteString -> Either String ByteString) -> String -> IO (Either String ByteString)
+translateVM f path
+  = do
+    file <- readFile path
+    case f $ BS.pack file of
+      Left e  -> printError e >> return (Left e)
+      Right r -> return (Right r)
+
+printError :: String -> IO ()
+printError e = liftIO (setSGR [SetColor Foreground Vivid Red] >> putStrLn e >> setSGR [Reset])
+
 main :: IO ()
 main = do
   progArgs@Args {argsInput=input, argsOutput=output'} <- cmdArgs args
-  let output = if not $ null output' then output' else replaceExtension input "asm"
-  let fileName = takeBaseName input
-  let translate' = translate $ BS.pack fileName
+
+  isDir <- doesDirectoryExist input
+  absoluteInput <- makeAbsolute input
+
+  let output
+        | not $ null output' = output'
+        | isDir = absoluteInput </> takeBaseName input <.> "asm"
+        | otherwise = input -<.> "asm"
+
+  let translate' = translate . BS.pack $ takeBaseName input
 
   if null input || argsRepl progArgs
     then replLoop translate'
-    else do
+    else if isDir
+      then do
+        dirs <- getDirectoryContents input
+        let vms = map (input </>) $ filter (isExtensionOf "vm") dirs
+        let t = (\s -> translateVM (translate . BS.pack $ takeBaseName s) s) <$> vms
+        res <- sequence t >>= \c -> return (BS.concat $ rights c)
+
+        case translate "" "call Sys.init 0" of
+          Left e -> printError e
+          Right bootstrap -> BS.writeFile output ("@256\nD=A\n@SP\nM=D\n" <> bootstrap <> res)
+
+      else do
       file <- readFile input
       case translate' $ BS.pack file of
-        Left e -> liftIO (setSGR [SetColor Foreground Vivid Red] >> putStrLn e >> setSGR [Reset])
+        Left e  -> printError e
         Right h -> BS.writeFile output h
-

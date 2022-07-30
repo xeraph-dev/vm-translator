@@ -2,19 +2,25 @@ module VMTranslator.Translator (translate) where
 
 import           Data.ByteString.Lazy.Char8 (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.Map                   as M
+import qualified Data.Maybe
 import           VMTranslator.AST           (ALCommand (..), BCommand (..),
                                              Exp (..), FCommand (..),
                                              MACommand (..), Segment (..))
 import           VMTranslator.Lexer         (Range (..))
 import           VMTranslator.Parser        (parse)
 
-newtype State = State
-  { label  :: Int
+data State = State
+  { label   :: Int
+  , fun     :: ByteString
+  , funCall :: M.Map ByteString Int
   }
 
 initState :: State
 initState = State
   { label = 0
+  , fun = ""
+  , funCall = M.empty
   }
 
 
@@ -262,29 +268,36 @@ translate' _ (state, acc) (EALCommand _ Not)
     \@SP\n\
     \M=M+1":acc)
 
-translate' _ (state, acc) (EBCommand _ (Label l))
-  = (state, "(" <> l <> ")":acc)
-translate' _ (state, acc) (EBCommand _ (Goto l))
+translate' fileName (state, acc) (EBCommand _ (Label l))
+  = (state, "(" <> l' <> ")":acc)
+  where
+    l' = (if not . BS.null $ fun state then fun state else fileName) <> "$" <> l
+translate' fileName (state, acc) (EBCommand _ (Goto l))
   = (state,
-    "@" <> l <> "\n"
+    "@" <> l' <> "\n"
  <> "0;JMP":acc)
-translate' _ (state, acc) (EBCommand _ (IfGoto l))
+  where
+    l' = (if not . BS.null $ fun state then fun state else fileName) <> "$" <> l
+translate' fileName (state, acc) (EBCommand _ (IfGoto l))
   = (state,
     "@SP\n\
     \M=M-1\n\
     \A=M\n\
     \D=M\n\
-    \@" <> l <> "\n"
+    \@" <> l' <> "\n"
  <> "D;JNE":acc)
-translate' _ (state, acc) (EFCommand _ (Call l i))
-  = (state {label=label state + 1} {- *SP=<function end>, SP++, *SP=LCL, SP++, *SP=ARG, SP++, *SP=THIS, SP++, *SP=THAT, D=SP++, ARG=D-(i+4), JUMP to <function> -}
-    ,"@" <> l <> ".end\n\
+  where
+    l' = (if not . BS.null $ fun state then fun state else fileName) <> "$" <> l
+translate' fileName (state, acc) (EFCommand _ (Call l i))
+  = (state {funCall=M.insert l' (count + 1) (funCall state)} {- *SP=<function end>, SP++, *SP=LCL, SP++, *SP=ARG, SP++, *SP=THIS, SP++, *SP=THAT, D=SP++, ARG=D-(i+4), JUMP to <function> -}
+    ,"@" <> ret <> "\n\
      \D=A\n\
      \@SP\n\
      \A=M\n\
      \M=D\n\
      \@SP\n\
      \M=M+1\n\
+
      \@LCL\n\
      \D=M\n\
      \@SP\n\
@@ -292,6 +305,7 @@ translate' _ (state, acc) (EFCommand _ (Call l i))
      \M=D\n\
      \@SP\n\
      \M=M+1\n\
+
      \@ARG\n\
      \D=M\n\
      \@SP\n\
@@ -299,6 +313,7 @@ translate' _ (state, acc) (EFCommand _ (Call l i))
      \M=D\n\
      \@SP\n\
      \M=M+1\n\
+
      \@THIS\n\
      \D=M\n\
      \@SP\n\
@@ -306,65 +321,104 @@ translate' _ (state, acc) (EFCommand _ (Call l i))
      \M=D\n\
      \@SP\n\
      \M=M+1\n\
+
      \@THAT\n\
      \D=M\n\
      \@SP\n\
      \A=M\n\
      \M=D\n\
      \@SP\n\
-     \D=M\n\
-     \M=M+1\n\
-     \@" <> BS.pack (show $ i + 4) <> "\n\
-     \D=D-A\n\
+     \MD=M+1\n\
+
+     \@" <> BS.pack (show $ i + 5) <> "\n\
+     \D=A\n\
+     \@SP\n\
+     \D=M-D\n\
      \@ARG\n\
      \M=D\n\
+
      \@SP\n\
      \D=M\n\
      \@LCL\n\
      \M=D\n\
+
      \@" <> l <> "\n\
      \0;JMP\n\
-     \(" <>  l <> ".end)" <> "\n":acc)
-translate' _ (state, acc) (EFCommand _ (Function l i))
-  = (state, {- LCL=SP, SP+=i -}
-    "(" <> l <> ")\n" <>
-    BS.pack (init $ unlines (replicate (fromInteger i) (BS.unpack
-    "@SP\n\
-    \A=M\n\
-    \M=0\n\
-    \@SP\n\
-    \M=M+1"))):acc)
-translate' fn (state, acc) (EFCommand r Return)
+     \(" <> ret <> ")":acc)
+     where
+      l' = fileName <> "." <> l
+      count = Data.Maybe.fromMaybe 0 (M.lookup l' (funCall state))
+      ret = l' <> "$ret." <> BS.pack (show count)
+translate' fn (state, acc) (EFCommand r (Function l i))
+  = (state {fun=l}, {- LCL=SP, SP+=i -}
+    "(" <> l <> ")" <>
+    (if i == 0
+      then ""
+      else "\n"
+      <> BS.pack (init $ unlines (replicate  (fromInteger i)
+          (BS.unpack . BS.init . BS.unlines . snd $ translate' fn (initState, []) (EMACommand r (Push Constant 0)))
+         ))):acc)
+translate' _ (state, acc) (EFCommand _ Return)
   = (state, {-  -}
-    (BS.unlines . snd $ translate' fn (initState, []) (EMACommand r (Pop Argument 0)))
- <> "@ARG\n\
+    "@LCL\n\
+    \D=M\n\
+    \@R13\n\
+    \M=D\n\
+
+    \@5\n\
+    \D=A\n\
+    \@R13\n\
+    \A=M-D\n\
+    \D=M\n\
+    \@R14\n\
+    \M=D\n\
+
+    \@SP\n\
+    \M=M-1\n\
+    \A=M\n\
+    \D=M\n\
+    \@ARG\n\
+    \A=M\n\
+    \M=D\n\
+
+    \@ARG\n\
     \D=M+1\n\
     \@SP\n\
     \M=D\n\
-    \@LCL\n\
-    \D=M\n\
+
+    \@1\n\
+    \D=A\n\
     \@R13\n\
-    \AM=D-1\n\
+    \A=M-D\n\
     \D=M\n\
     \@THAT\n\
     \M=D\n\
+
+    \@2\n\
+    \D=A\n\
     \@R13\n\
-    \AM=M-1\n\
+    \A=M-D\n\
     \D=M\n\
     \@THIS\n\
     \M=D\n\
+
+    \@3\n\
+    \D=A\n\
     \@R13\n\
-    \AM=M-1\n\
+    \A=M-D\n\
     \D=M\n\
     \@ARG\n\
     \M=D\n\
+
+    \@4\n\
+    \D=A\n\
     \@R13\n\
-    \AM=M-1\n\
+    \A=M-D\n\
     \D=M\n\
     \@LCL\n\
     \M=D\n\
-    \@R13\n\
-    \AM=M-1\n\
+
+    \@R14\n\
     \A=M\n\
     \0;JMP":acc)
 
